@@ -21,17 +21,36 @@
 
     <title>Miamdown</title>
 
-    <!--
-      External libraries pinned to exact versions for SRI compatibility.
-      To regenerate the integrity hashes (e.g. when bumping a version):
-        curl -sL <URL> | openssl dgst -sha384 -binary | openssl base64 -A
-        # then prefix with "sha384-" and put in the integrity attribute.
-      Hashes below are placeholders — run the command above and replace them
-      before deploying. Without valid SRI, browsers will still load the scripts;
-      with invalid SRI, browsers will REFUSE to load them.
-    -->
-    <script src="https://cdn.jsdelivr.net/npm/marked@14.1.3/marked.min.js" integrity="sha384-k8o8HikHweyzW55Wd3wl18ovJj6vHVYNQeQbeSM0fxx+0WiH4TcccOG9uz8Xd2JR" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js" integrity="sha384-XQqX/4yiUGu+oyr87jvWzRuqBUK/adrY0DunhL+tID9m/9dwSpV8h9Fk/Sg6ifVQ" crossorigin="anonymous"></script>
+    <!-- ============================================================
+         EXTERNAL LIBRARIES — SUBRESOURCE INTEGRITY (SRI)
+         ============================================================
+         These two scripts are loaded from a public CDN. For supply-chain
+         security, you SHOULD add an `integrity="sha384-..."` attribute to
+         each <script> tag below.
+
+         Versions are pinned (marked@14.1.3, dompurify@3.1.7) so the hashes
+         are stable — you only regenerate them when you bump a version.
+
+         HOW TO GENERATE THE HASHES (one-time setup):
+
+           curl -sL https://cdn.jsdelivr.net/npm/marked@14.1.3/marked.min.js \
+             | openssl dgst -sha384 -binary | openssl base64 -A; echo
+
+           curl -sL https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js \
+             | openssl dgst -sha384 -binary | openssl base64 -A; echo
+
+         No terminal? Use https://www.srihash.org/ with the URLs above.
+
+         Then add `integrity="sha384-<the-hash>"` to each <script> tag below.
+         See README.md → "Subresource Integrity" for full details.
+
+         Without integrity attributes, the app still works — it just loses
+         protection against a CDN compromise.
+         ============================================================ -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@14.1.3/marked.min.js"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"
+            crossorigin="anonymous"></script>
 
     <style>
         :root {
