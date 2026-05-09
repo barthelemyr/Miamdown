@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- PWA / Mode Application Native -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" id="meta-theme-color" content="#fdfcf8">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>">
+    
+    <title>Miamdown</title>
+    
+    <!-- Librairies (Pour une vraie PWA hors-ligne, ces fichiers devraient être locaux et/ou avoir des attributs d'intégrité SRI) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #fdfcf8;
+            --text-color: #2b2b2b;
+            --control-bg: rgba(255, 255, 255, 0.9);
+            --control-border: #e0e0e0;
+            --accent: #555;
+            --progress-track: rgba(0,0,0,0.05);
+            --meta-text: #888;
+        }
+
+        body.dark-mode {
+            --bg-color: #121212;
+            --text-color: #d4d4d4;
+            --control-bg: rgba(30, 30, 30, 0.9);
+            --control-border: #333;
+            --accent: #aaa;
+            --progress-track: rgba(255,255,255,0.1);
+            --meta-text: #777;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body:not(.light-mode) {
+                /* Le Dark mode système est géré via JS pour synchroniser le meta-theme-color */
+            }
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0; padding: 0;
+            transition: background-color 0.3s, color 0.3s;
+            overflow-x: hidden;
+        }
+
+        /* --- OVERLAY DE LUMINOSITÉ --- */
+        #brightness-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: black; pointer-events: none; z-index: 9999; 
+            opacity: 0; transition: opacity 0.2s;
+        }
+
+        /* --- VUE CONFIGURATION --- */
+        #setup-view {
+            max-width: 650px; margin: 0 auto; padding: 50px 20px;
+            display: flex; flex-direction: column; gap: 15px; min-height: 100vh;
+        }
+        
+        .setup-header { display: flex; justify-content: space-between; align-items: center; }
+        .setup-header h1 { font-weight: 400; margin: 0; font-size: 28px; color: var(--text-color); }
+        .setup-subtitle { color: var(--meta-text); margin: -5px 0 10px 0; font-size: 15px; }
+
+        .setup-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        
+        .btn {
+            background: var(--control-bg); color: var(--text-color);
+            border: 1px solid var(--control-border); padding: 12px 20px;
+            border-radius: 8px; cursor: pointer; font-size: 15px;
+            font-weight: 500; font-family: inherit;
+            display: inline-flex; align-items: center; gap: 8px;
+            transition: all 0.2s; text-decoration: none;
+        }
+        .btn:hover { background: var(--control-border); }
+        .btn.primary { 
+            background: var(--text-color); color: var(--bg-color); 
+            border-color: var(--text-color); padding: 15px; font-size: 18px; 
+            justify-content: center; margin-top: 10px; font-weight: bold;
+        }
+        .btn.primary:hover { opacity: 0.9; transform: translateY(-1px); }
+        .btn-outline { background: transparent; }
+        .btn.danger { background: #c0392b; color: white; border-color: #c0392b; }
+        .btn.danger:hover { background: #a83224; }
+        
+        .icon-btn {
+            background: transparent; color: var(--text-color);
+            border: 1px solid var(--control-border);
+            border-radius: 50%; width: 45px; height: 45px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; cursor: pointer; transition: 0.2s;
+        }
+        .icon-btn:hover { background: var(--control-border); }
+
+        textarea {
+            width: 100%; flex-grow: 1; min-height: 45vh; padding: 20px;
+            border: 2px dashed var(--control-border); border-radius: 12px;
+            background: rgba(128,128,128,0.02); color: var(--text-color); 
+            font-family: 'SFMono-Regular', Consolas, monospace; font-size: 15px;
+            line-height: 1.6; resize: vertical; transition: border-color 0.2s;
+        }
+        textarea:focus { outline: none; border-color: var(--accent); }
+
+        /* --- TOAST --- */
+        #toast {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px);
+            background: var(--text-color); color: var(--bg-color);
+            padding: 12px 20px; border-radius: 8px; font-size: 14px;
+            z-index: 10001; opacity: 0; transition: all 0.3s;
+            pointer-events: none; max-width: 90%; text-align: center;
+        }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        /* --- MODALE CUSTOM (A11Y) --- */
+        #modal-backdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+            z-index: 10002; display: none; align-items: center; justify-content: center;
+            padding: 20px; backdrop-filter: blur(4px);
+        }
+        #modal-backdrop.show { display: flex; }
+        #modal {
+            background: var(--bg-color); color: var(--text-color);
+            border-radius: 16px; padding: 25px; max-width: 400px; width: 100%;
+            border: 1px solid var(--control-border);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            animation: modalIn 0.2s ease-out;
+        }
+        @keyframes modalIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        #modal h3 { margin: 0 0 10px 0; font-weight: 500; font-size: 18px; }
+        #modal p { margin: 0 0 20px 0; color: var(--meta-text); font-size: 15px; line-height: 1.5; }
+        #modal .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+        /* --- VUE LECTURE & MARKDOWN --- */
+        #read-view { display: none; padding-bottom: 120px; position: relative; }
+        
+        #progress-container {
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 24px;
+            z-index: 1000; cursor: pointer; touch-action: none;
+        }
+        #progress-visual-track {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 4px;
+            background: var(--progress-track);
+        }
+        #progress-bar {
+            position: absolute; bottom: 0; left: 0; height: 4px; width: 0%; 
+            background: var(--accent); transition: width 0.1s linear;
+        }
+        #progress-container:active #progress-bar { height: 6px; }
+
+        #reading-meta {
+            max-width: 700px; margin: 0 auto; padding: 40px 25px 0 25px;
+            font-size: 14px; color: var(--meta-text); text-align: center; font-style: italic;
+            border-bottom: 1px solid var(--control-border); padding-bottom: 15px;
+        }
+        #content {
+            font-family: 'Georgia', serif; font-size: 18px; line-height: 1.6;
+            max-width: 700px; margin: 0 auto; padding: 10px 25px 40px 25px;
+            overflow-wrap: break-word; /* Protection contre les URLs/Mots géants */
+        }
+        
+        #content h1, #content h2, #content h3 { font-family: system-ui, sans-serif; font-weight: 600; line-height: 1.2; margin-top: 1.5em; }
+        #content p { margin-bottom: 1.5em; hyphens: auto; }
+        @media (min-width: 600px) {
+            #content p { text-align: justify; }
+        }
+        #content a { color: inherit; }
+        #content img { max-width: 100%; border-radius: 8px; }
+        #content blockquote { border-left: 3px solid var(--accent); margin: 0 0 1.5em 0; padding-left: 15px; font-style: italic; opacity: 0.8;}
+        #content ul, #content ol { margin-bottom: 1.5em; padding-left: 20px; }
+        #content li { margin-bottom: 0.5em; }
+        #content hr { border: 0; border-bottom: 1px solid var(--control-border); margin: 2em 0; }
+
+        #content table { width: 100%; border-collapse: collapse; margin: 2em 0; display: block; overflow-x: auto; word-break: break-word; }
+        #content th, #content td { border: 1px solid var(--control-border); padding: 8px 10px; vertical-align: top; }
+        #content th { background: var(--control-bg); font-weight: 600; text-align: left; }
+
+        #content pre {
+            background-color: var(--control-bg);
+            border: 1px solid var(--control-border);
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            white-space: pre;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 14px;
+            line-height: 1.3;
+            margin: 1.5em 0;
+        }
+        #content code {
+            font-family: monospace; background-color: rgba(128, 128, 128, 0.1);
+            padding: 2px 5px; border-radius: 4px; font-size: 0.9em;
+        }
+        #content pre code { background-color: transparent; padding: 0; font-size: 1em; }
+
+        /* --- CONTRÔLES FLOTTANTS --- */
+        #controls-wrapper {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            display: flex; flex-direction: column; align-items: center; gap: 15px;
+            z-index: 1001; transition: opacity 0.3s, transform 0.3s;
+        }
+        #controls-wrapper.hidden { opacity: 0; transform: translate(-50%, 20px); pointer-events: none; }
+
+        #brightness-slider-container {
+            background: var(--control-bg); padding: 10px 20px; border-radius: 20px;
+            border: 1px solid var(--control-border); backdrop-filter: blur(10px);
+            display: none;
+        }
+        #controls {
+            display: flex; gap: 10px; background: var(--control-bg);
+            padding: 10px 15px; border-radius: 50px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); border: 1px solid var(--control-border);
+            backdrop-filter: blur(10px);
+        }
+        #controls button { border: none; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; background: transparent; color: var(--text-color); cursor: pointer; }
+        #controls button:hover { background-color: var(--control-border); }
+    </style>
+</head>
+<body>
+
+    <div id="brightness-overlay"></div>
+    <div id="toast"></div>
+
+    <!-- Modale custom avec rôles ARIA -->
+    <div id="modal-backdrop">
+        <div id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-message">
+            <h3 id="modal-title">Confirm</h3>
+            <p id="modal-message">Are you sure?</p>
+            <div class="modal-actions">
+                <button class="btn btn-outline" id="modal-cancel">Cancel</button>
+                <button class="btn danger" id="modal-confirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="setup-view">
+        <div class="setup-header">
+            <h1>📖 Miamdown</h1>
+            <button class="icon-btn" id="theme-toggle-setup" title="Toggle theme">🌓</button>
+        </div>
+        <p class="setup-subtitle">Paste your Markdown text or open a local file.</p>
+
+        <div class="setup-actions">
+            <label for="file-input" class="btn">📂 Load file</label>
+            <input type="file" id="file-input" accept=".md,.txt" style="display: none;">
+            
+            <button id="clear-btn" class="btn btn-outline">🗑️ Clear</button>
+        </div>
+
+        <textarea id="md-input" placeholder="Type or paste your Markdown text here..."></textarea>
+        
+        <button id="read-btn" class="btn primary">Start reading ➔</button>
+    </div>
+
+    <div id="read-view">
+        <div id="progress-container">
+            <div id="progress-visual-track"></div>
+            <div id="progress-bar"></div>
+        </div>
+        <div id="reading-meta">Reading time: <span id="read-time-val">0</span> min</div>
+        <div id="content"></div>
+        <div id="controls-wrapper">
+            <div id="brightness-slider-container">
+                <input type="range" id="brightness-slider" min="0" max="80" value="0" style="width: 150px;">
+            </div>
+            <div id="controls">
+                <button id="back-btn" title="Back">🔙</button>
+                <button id="dec-font" title="Decrease font size">A-</button>
+                <button id="inc-font" title="Increase font size">A+</button>
+                <button id="bright-btn" title="Brightness">☀️</button>
+                <button id="theme-btn" title="Theme">🌓</button>
+                <button id="fs-btn" title="Fullscreen">⛶</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =======================================================
+        //  SAFE STORAGE
+        // =======================================================
+        const Storage = {
+            get(key, fallback = null) {
+                try {
+                    const v = localStorage.getItem(key);
+                    return v === null ? fallback : v;
+                } catch (e) {
+                    return fallback;
+                }
+            },
+            set(key, value) {
+                try {
+                    localStorage.setItem(key, value);
+                    return true;
+                } catch (e) {
+                    if (e.name === 'QuotaExceededError' || e.code === 22) {
+                        showToast('⚠️ Storage full — text too large to save');
+                    } else {
+                        showToast('⚠️ Could not save (storage unavailable)');
+                    }
+                    return false;
+                }
+            },
+            remove(key) {
+                try { localStorage.removeItem(key); } catch (e) {}
+            }
+        };
+
+        // --- TOAST ---
+        let toastTimeout;
+        const toastEl = document.getElementById('toast');
+        function showToast(message, duration = 3000) {
+            toastEl.textContent = message;
+            toastEl.classList.add('show');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => toastEl.classList.remove('show'), duration);
+        }
+
+        // --- MODALE CUSTOM (A11Y) ---
+        const modalBackdrop = document.getElementById('modal-backdrop');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalConfirmBtn = document.getElementById('modal-confirm');
+        const modalCancelBtn = document.getElementById('modal-cancel');
+
+        function showConfirm({ title = 'Confirm', message = 'Are you sure?', confirmText = 'Confirm', cancelText = 'Cancel', danger = true }) {
+            return new Promise((resolve) => {
+                const previousActiveElement = document.activeElement;
+
+                modalTitle.textContent = title;
+                modalMessage.textContent = message;
+                modalConfirmBtn.textContent = confirmText;
+                modalCancelBtn.textContent = cancelText;
+                modalConfirmBtn.classList.toggle('danger', danger);
+                modalConfirmBtn.classList.toggle('primary', !danger);
+                modalBackdrop.classList.add('show');
+                
+                modalCancelBtn.focus();
+
+                const cleanup = (result) => {
+                    modalBackdrop.classList.remove('show');
+                    modalConfirmBtn.removeEventListener('click', onConfirm);
+                    modalCancelBtn.removeEventListener('click', onCancel);
+                    modalBackdrop.removeEventListener('click', onBackdrop);
+                    document.removeEventListener('keydown', onKey);
+                    if (previousActiveElement) previousActiveElement.focus();
+                    resolve(result);
+                };
+                
+                const onConfirm = () => cleanup(true);
+                const onCancel = () => cleanup(false);
+                const onBackdrop = (e) => { if (e.target === modalBackdrop) cleanup(false); };
+                const onKey = (e) => {
+                    if (e.key === 'Escape') cleanup(false);
+                    else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        cleanup(document.activeElement === modalConfirmBtn);
+                    }
+                };
+
+                modalConfirmBtn.addEventListener('click', onConfirm);
+                modalCancelBtn.addEventListener('click', onCancel);
+                modalBackdrop.addEventListener('click', onBackdrop);
+                document.addEventListener('keydown', onKey);
+            });
+        }
+
+        // =======================================================
+        //  ÉLÉMENTS DOM
+        // =======================================================
+        const mdInput = document.getElementById('md-input');
+        const contentDiv = document.getElementById('content');
+        const progressBar = document.getElementById('progress-bar');
+        const progressContainer = document.getElementById('progress-container');
+        const controlsWrapper = document.getElementById('controls-wrapper');
+        const brightOverlay = document.getElementById('brightness-overlay');
+        const brightSlider = document.getElementById('brightness-slider');
+        const brightSliderContainer = document.getElementById('brightness-slider-container');
+        const metaThemeColor = document.getElementById('meta-theme-color');
+        const readView = document.getElementById('read-view');
+        const setupView = document.getElementById('setup-view');
+
+        // --- ÉTAT ET PRÉFÉRENCES CLAMPÉES ---
+        let fontSize = Math.max(12, Math.min(40, parseInt(Storage.get('liseuse_font_size')) || 18));
+        let brightness = Math.max(0, Math.min(80, parseInt(Storage.get('liseuse_brightness')) || 0));
+        
+        let savedTheme = Storage.get('liseuse_theme');
+        let isDark = savedTheme ? (savedTheme === 'dark') : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        
+        contentDiv.style.fontSize = fontSize + 'px';
+        brightOverlay.style.opacity = brightness / 100;
+        brightSlider.value = brightness;
+        if (isDark) {
+            document.body.classList.add('dark-mode');
+            metaThemeColor.content = "#121212";
+        }
+
+        // --- GESTION DU SCROLL CENTRALISÉE ---
+        let savedScrollPercent = parseFloat(Storage.get('liseuse_scroll_pct')) || 0;
+        
+        function setSavedScrollPct(pct) {
+            savedScrollPercent = pct;
+            Storage.set('liseuse_scroll_pct', pct.toFixed(4));
+        }
+
+        // --- DEBOUNCE POUR LA SAUVEGARDE DU TEXTE ---
+        mdInput.value = Storage.get('liseuse_text', '');
+        let inputSaveTimeout;
+
+        mdInput.addEventListener('input', () => {
+            clearTimeout(inputSaveTimeout);
+            inputSaveTimeout = setTimeout(() => {
+                Storage.set('liseuse_text', mdInput.value);
+            }, 300);
+            
+            setSavedScrollPct(0);
+        });
+
+        // --- COMMANDES PRINCIPALES ---
+        document.getElementById('read-btn').addEventListener('click', () => {
+            if (!mdInput.value.trim()) return;
+            
+            // Rendu Sécurisé
+            // NB: Pour un lecteur Markdown totalement hermétique et privé (sans appels distants), on pourrait ajouter :
+            // DOMPurify.sanitize(htmlRaw, { FORBID_TAGS: ['img'] });
+            const htmlRaw = marked.parse(mdInput.value);
+            contentDiv.innerHTML = DOMPurify.sanitize(htmlRaw);
+            
+            const words = mdInput.value.trim().split(/\s+/).length;
+            document.getElementById('read-time-val').innerText = Math.ceil(words / 225);
+            
+            const titleMatch = mdInput.value.match(/^#\s+(.*)/m);
+            document.title = titleMatch 
+                ? titleMatch[1].replace(/[*_`#[\]()]/g, '').trim() 
+                : "Miamdown";
+
+            setupView.style.display = 'none';
+            readView.style.display = 'block';
+            
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+                    window.scrollTo(0, height * savedScrollPercent);
+                });
+            });
+        });
+
+        document.getElementById('back-btn').addEventListener('click', () => {
+            readView.style.display = 'none';
+            setupView.style.display = 'flex';
+        });
+
+        document.getElementById('clear-btn').addEventListener('click', async () => {
+            if (mdInput.value.trim() === "") return;
+            const ok = await showConfirm({
+                title: 'Clear text?',
+                message: 'This will remove all the text you pasted. This cannot be undone.',
+                confirmText: 'Clear',
+                cancelText: 'Cancel',
+                danger: true
+            });
+            if (ok) {
+                mdInput.value = '';
+                Storage.remove('liseuse_text');
+                setSavedScrollPct(0);
+                mdInput.focus();
+            }
+        });
+
+        // --- ACTIONS MENU ---
+        const updateFont = (delta) => {
+            const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+            const currentPct = height > 0 ? window.scrollY / height : 0;
+
+            fontSize = Math.max(12, Math.min(40, fontSize + delta));
+            contentDiv.style.fontSize = fontSize + 'px';
+            Storage.set('liseuse_font_size', fontSize);
+
+            requestAnimationFrame(() => {
+                const newHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+                window.scrollTo(0, newHeight * currentPct);
+            });
+        };
+        document.getElementById('inc-font').addEventListener('click', () => updateFont(2));
+        document.getElementById('dec-font').addEventListener('click', () => updateFont(-2));
+
+        const toggleTheme = () => {
+            document.body.classList.toggle('dark-mode');
+            isDark = document.body.classList.contains('dark-mode');
+            Storage.set('liseuse_theme', isDark ? 'dark' : 'light');
+            metaThemeColor.content = isDark ? "#121212" : "#fdfcf8";
+        };
+        document.getElementById('theme-btn').addEventListener('click', toggleTheme);
+        document.getElementById('theme-toggle-setup').addEventListener('click', toggleTheme);
+
+        document.getElementById('bright-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            brightSliderContainer.style.display = brightSliderContainer.style.display === 'block' ? 'none' : 'block';
+        });
+        brightSlider.addEventListener('input', (e) => {
+            brightness = e.target.value;
+            brightOverlay.style.opacity = brightness / 100;
+            Storage.set('liseuse_brightness', brightness);
+        });
+
+        document.getElementById('fs-btn').addEventListener('click', async () => {
+            try {
+                if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+                    await document.documentElement.requestFullscreen();
+                } else if (document.exitFullscreen) {
+                    await document.exitFullscreen();
+                }
+            } catch (err) {
+                console.warn("Fullscreen unavailable:", err);
+            }
+        });
+
+        // --- SCROLL & PROGRESSION ---
+        let scrollTimeout;
+        window.addEventListener('scroll', () => {
+            const winScroll = window.scrollY;
+            const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+            const pct = height > 0 ? winScroll / height : 0;
+            
+            if (!isDraggingProgress) {
+                progressBar.style.width = (pct * 100) + "%";
+            }
+            
+            controlsWrapper.classList.add('hidden');
+            brightSliderContainer.style.display = 'none';
+
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                if (readView.style.display === 'block') {
+                    setSavedScrollPct(pct);
+                }
+            }, 200);
+        });
+
+        // --- NAVIGATION RAPIDE (PROGRESS BAR INTERACTIVE) ---
+        let isDraggingProgress = false;
+
+        const saveCurrentScrollPct = () => {
+            if (readView.style.display === 'block') {
+                const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+                const pct = height > 0 ? window.scrollY / height : 0;
+                setSavedScrollPct(pct);
+            }
+        };
+
+        const updateScrollFromProgress = (e) => {
+            const point = e.touches ? e.touches[0] : e;
+            const rect = progressContainer.getBoundingClientRect();
+            const percentage = Math.max(0, Math.min(1, (point.clientX - rect.left) / rect.width));
+            const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+            
+            if (height > 0) {
+                progressBar.style.width = (percentage * 100) + "%";
+                window.scrollTo(0, height * percentage);
+            }
+        };
+
+        // Souris
+        progressContainer.addEventListener('mousedown', (e) => {
+            isDraggingProgress = true;
+            progressBar.style.transition = 'none';
+            updateScrollFromProgress(e);
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (isDraggingProgress) updateScrollFromProgress(e);
+        });
+        window.addEventListener('mouseup', () => {
+            if (isDraggingProgress) {
+                isDraggingProgress = false;
+                progressBar.style.transition = 'width 0.1s linear';
+                saveCurrentScrollPct();
+            }
+        });
+
+        // Tactile
+        progressContainer.addEventListener('touchstart', (e) => {
+            isDraggingProgress = true;
+            progressBar.style.transition = 'none';
+            updateScrollFromProgress(e);
+        }, {passive: true});
+        window.addEventListener('touchmove', (e) => {
+            if (isDraggingProgress) {
+                e.preventDefault();
+                updateScrollFromProgress(e);
+            }
+        }, {passive: false});
+        window.addEventListener('touchend', () => {
+            if (isDraggingProgress) {
+                isDraggingProgress = false;
+                progressBar.style.transition = 'width 0.1s linear';
+                saveCurrentScrollPct();
+            }
+        });
+
+        // --- TAP IMMERSIF ---
+        readView.addEventListener('click', (e) => {
+            if(e.target.tagName !== 'A' && !e.target.closest('#controls-wrapper') && !e.target.closest('#progress-container')) {
+                controlsWrapper.classList.toggle('hidden');
+            }
+        });
+
+        // --- IMPORT DE FICHIER ---
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => { 
+                mdInput.value = ev.target.result; 
+                Storage.set('liseuse_text', ev.target.result);
+                setSavedScrollPct(0);
+                e.target.value = ''; // Permet de re-sélectionner le même fichier ensuite
+            };
+            reader.onerror = () => showToast('⚠️ Could not read file');
+            reader.readAsText(file);
+        });
+    </script>
+</body>
+</html>
