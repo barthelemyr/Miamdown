@@ -1,6 +1,6 @@
 # Miamdown
 
-[Try the Live Demo here](https://your-username.github.io/miamdown/)
+[Try the Live Demo here](https://barthelemyr.github.io/Miamdown/)
 
 A minimalist, distraction-free Markdown reader packed into a single, standalone HTML file. 
 
